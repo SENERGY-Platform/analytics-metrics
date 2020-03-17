@@ -21,20 +21,20 @@ from requests.auth import HTTPBasicAuth
 import pandas as pd
 
 
-def query_influx(query, operator_id, params=None):
+def query_influx(query, pipeline_id, params=None):
     query = escape(query)
     url = "{influx_db_url}/query".format(influx_db_url=os.environ["INFLUX_DB_URL"])
     if params:
         params = escape(params)
-        response = requests.post(url, params=f'db={operator_id}&q={query}&params={str(params)}',
+        response = requests.post(url, params=f'db={pipeline_id}&q={query}&params={str(params)}',
                                  auth=HTTPBasicAuth(os.environ['INFLUX_DB_USER'], os.environ['INFLUX_DB_PASSWORD']))
-        print("Request: " + url + "?db=" + operator_id + "&q=" + query + "&params=" + str(params))
+        print("Request: " + url + "?db=" + pipeline_id + "&q=" + query + "&params=" + str(params))
         return response
     else:
         query = {"q": query}
-        response = requests.post(url, params="db=" + operator_id, data=query,
+        response = requests.post(url, params="db=" + pipeline_id, data=query,
                                  auth=HTTPBasicAuth(os.environ['INFLUX_DB_USER'], os.environ['INFLUX_DB_PASSWORD']))
-        print("Request: " + url + "?db=" + operator_id + "&q=" + query["q"])
+        print("Request: " + url + "?db=" + pipeline_id + "&q=" + query["q"])
         return response
 
 
