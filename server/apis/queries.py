@@ -174,7 +174,7 @@ class Queries(Resource):
             except Exception:
                 abort(400, "Can't parse limit")
 
-            querystrings[i] = {"db": id, "query": querystring}
+            querystrings[i] = {"db": pipeline, "query": querystring}
 
         df = []
         for i in querystrings:
