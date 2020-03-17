@@ -54,7 +54,7 @@ response_model = api.model("QueriesResponseModel", {
         "series": fields.List(fields.Nested(api.model("QueriesSeriesModel", {
             "columns": fields.List(fields.String(description="Columns, map these to values")),
             "name": fields.String(description="Name of the query"),
-            "values": fields.List(fields.List(fields.String(description="Actual value, can be Float or String")))
+            "values": fields.List(fields.List(fields.Raw(description="Actual value, can be Float or String")))
         })))
     })))
 })
