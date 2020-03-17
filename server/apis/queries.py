@@ -119,7 +119,7 @@ class Queries(Resource):
                 abort(400, "Missing fields for pipeline " + pipeline)
             querystring = "SELECT "
             if use_groups:
-                querystring += grouptype + "(value) "
+                querystring += grouptype + "(value) AS value"
             else:
                 querystring += "value "
             querystring += "FROM "
@@ -186,7 +186,7 @@ class Queries(Resource):
                 abort(502, str(e))
 
             influxdata = jsonify(influxdata.json())
-            df_current = dataframes(querystrings[i]['db'], influxdata)
+            df_current = dataframes(columns[i], influxdata)
             if len(df_current) == 0:
                 print("Got empty results for query " + str(i))
                 print("Adding empty columns " + str(columns[i]))

@@ -147,7 +147,7 @@ def dataframes(id, response):
 
         for i in range(len(columns)):
             if columns[i] != "time":
-                columns[i] = str(id) + ":" + series["name"]
+                columns[i] = id
         df.append(pd.DataFrame.from_records(values, columns=columns))
     return df
 
