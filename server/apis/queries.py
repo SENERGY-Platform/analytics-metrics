@@ -119,7 +119,7 @@ class Queries(Resource):
                 abort(400, "Missing fields for pipeline " + pipeline)
             querystring = "SELECT "
             if use_groups:
-                querystring += grouptype + "(value) AS value"
+                querystring += grouptype + "(value) AS value "
             else:
                 querystring += "value "
             querystring += "FROM "
