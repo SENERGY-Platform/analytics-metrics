@@ -13,46 +13,52 @@
    See the License for the specific language governing permissions and
    limitations under the License.
 """
-
-'''
-Structure of POST Body:
-{
-  "time": {
-    "last": "1d" //either last or (start and end)
-    "start": "2015-08-18T00:00:00Z",
-    "end": "2015-08-18T00:30:00Z",
-  },
-  "group": {
-    "time": "12m",
-    "type": "count,sum,mean,median" //default = mean
-  },
-  "queries": [
-    {
-      "pipeline": "" //pipeline -> db
-      "operator": "", // 'pipe:operator' -> db
-      "fields": {
-        "metric": "", // metric -> table
-      }
-    }
-  ],
-  "limit": 100 // optional, will return values for all queries when available
-}
-
-TODO: Math
-'''
-
+import math
 import json
 import hashlib
 import re
-
 from flask import request, jsonify
-from flask_restx import Namespace, abort, Resource
-
-from server.util import query_influx, dataframes, response_from_dfs, pipeline_belongs_to_user, get_pipeline_reponse
-
+from flask_restx import Namespace, abort, Resource, fields
+from server.util import query_influx, pipeline_belongs_to_user, get_pipeline_reponse
 import pandas as pd
 
 api = Namespace('queries', description="Retrieve metrics")
+
+request_model = api.model("QueriesRequestModel", {
+    "time": fields.Nested(api.model("QueriesTimeModel", {
+        "last": fields.String(description="Request data from the last x ns|u|µ|ms|s|m|h|d|w; Set either 'last' OR "
+                                          "'start' AND 'end'"),
+        "start": fields.String(description="Request data with this start date. Set either 'last' OR 'start' AND "
+                                           "'end'. Format: \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|(\+|-)\d+("
+                                           ":\d+)?)"),
+        "end": fields.String(
+            description="Request data with this start date. Set either 'last' OR 'start' AND 'end'. Format: \d{4}-\d{"
+                        "2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|(\+|-)\d+(:\d+)?)")
+    })),
+    "group": fields.Nested(api.model("QueriesGroupModel", {
+        "time": fields.String(description="Group results by time. Format: \d+(ns|u|µ|ms|s|m|h|d|w)"),
+        "type": fields.String(description="Aggregation formula. Allowed are mean, sum, count, median")
+    })),
+    "queries": fields.List(fields.Nested(api.model("QueriesQueryModel", {
+        "pipeline": fields.String(description="Pipeline ID"),
+        "operator": fields.String(description="Operator ID"),
+        "fields": fields.List(fields.Nested(api.model("QueriesQueryFieldModel", {
+            "metric": fields.String(description="Metric to retrieve. Check possible metrics for pipeline with /measurements")
+        })))
+    }))),
+    "limit": fields.Integer(description="Limit number of results to latest x results")
+})
+
+response_model = api.model("QueriesResponseModel", {
+    "results": fields.List(fields.Nested(api.model("QueriesResultsModel", {
+        "series": fields.List(fields.Nested(api.model("QueriesSeriesModel", {
+            "columns": fields.List(fields.String(description="Columns, map these to values")),
+            "name": fields.String(description="Name of the query"),
+            "values": fields.List(fields.List(fields.String(description="Actual value, can be Float or String")))
+        })))
+    })))
+})
+
 
 
 @api.route('')
@@ -64,6 +70,8 @@ class Queries(Resource):
         self.regex_math = re.compile("(\+|-|\*|/)\d+((\.|,)\d+)?")
         self.regex_date = re.compile("\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|(\+|-)\d+(:\d+)?)")
 
+    @api.expect(request_model)
+    @api.marshal_with(response_model)
     def post(self):
         try:
             body = json.loads(request.data.decode("utf-8"))
@@ -90,6 +98,7 @@ class Queries(Resource):
 
         querystrings = {}
         columns = []
+        operators = []
         for i in range(len(queries)):
             columns.append([])
             columns[i].append("time")
@@ -99,6 +108,7 @@ class Queries(Resource):
                 abort(400, "Missing pipeline for query " + str(i))
             try:
                 operator = queries[i]["operator"]
+                operators.append(operator)
             except KeyError:
                 abort(400, "Missing operator for pipeline " + pipeline)
 
@@ -127,7 +137,8 @@ class Queries(Resource):
                 try:
                     metric = queries[i]['fields'][j]["metric"]
                 except KeyError:
-                    abort(400, "Missing metric for field " + str(j) +", pipeline/operator " + pipeline + "/" + operator)
+                    abort(400,
+                          "Missing metric for field " + str(j) + ", pipeline/operator " + pipeline + "/" + operator)
                 columns[i].append(pipeline + ":" + operator + ":" + metric)
                 querystring += "\"" + metric + "\""
                 if j < len(fields) - 1:
@@ -186,7 +197,7 @@ class Queries(Resource):
                 abort(502, str(e))
 
             influxdata = jsonify(influxdata.json())
-            df_current = dataframes(columns[i], influxdata)
+            df_current = dataframes(querystrings[i]["db"], operators[i], influxdata)
             if len(df_current) == 0:
                 print("Got empty results for query " + str(i))
                 print("Adding empty columns " + str(columns[i]))
@@ -196,3 +207,74 @@ class Queries(Resource):
         hasher = hashlib.sha256()
         hasher.update(request.data)
         return response_from_dfs(df, "metricsquery." + str(hasher.hexdigest()))
+
+
+def dataframes(pipeline, operator, response):
+    if 'error' in response.json:
+        raise Exception(response.json)
+    df = []
+    try:
+        print(str(response.data.decode("utf-8")))
+        seriess = json.loads(response.data.decode("utf-8"))['results'][0]['series']
+    except KeyError as ke:
+        print("Got empty results for query with pipeline/operator " + pipeline + "/" + operator)
+        return df
+    for series in seriess:
+        columns = series["columns"]
+        values = series['values']
+
+        for i in range(len(columns)):
+            if columns[i] != "time":
+                columns[i] = pipeline + ":" + operator + ":" + series["name"]
+        df.append(pd.DataFrame.from_records(values, columns=columns))
+    return df
+
+
+def response_from_dfs(df, name):
+    resp = empty_response()
+
+    if len(df) < 1:
+        return resp
+
+    for i in range(1, len(df)):
+        df[0] = df[0].merge(df[i], how="outer", on="time")
+
+    df[0].sort_values(axis=0, by='time', inplace=True, ascending=False)
+
+    nump = df[0].to_numpy()
+    values = []
+    for i in range(nump.shape[0]):
+        value = []
+        for j in range(nump.shape[1]):
+            ij = nump[i][j]
+            if type(ij) is float and math.isnan(ij):
+                value.append(None)
+            else:
+                value.append(ij)
+        values.append(value)
+    columns = []
+    for i in df[0].columns:
+        columns.append(i)
+
+    resp['results'][0]['series'][0]['columns'] = columns
+    resp['results'][0]['series'][0]['name'] = 'merge.' + name
+    resp['results'][0]['series'][0]['values'] = values
+
+    return resp
+
+
+def empty_response():
+    return {
+        'results': [
+            {
+                'series': [
+                    {
+                        'columns': [],
+                        'name': '',
+                        'values': []
+                    }
+                ],
+                'statement_id': 0
+            }
+        ]
+    }
