@@ -13,6 +13,7 @@
    See the License for the specific language governing permissions and
    limitations under the License.
 """
+import json
 
 from flask import request
 from flask_restx import Namespace, abort, fields, Resource
@@ -62,7 +63,10 @@ class MeasurementsMulti(Resource):
     def post(self):
         user_id = request.headers.get("X-UserID")
 
-        ids = request.get_json()["ids"]
+        try:
+            ids = json.loads(request.data.decode("utf-8"))["ids"]
+        except KeyError:
+            abort(400, "Need post body with {\"ids\":[]}")
         response = {'list': []}
         for id in ids:
             pipeline_reponse = get_pipeline_reponse(id, user_id)
