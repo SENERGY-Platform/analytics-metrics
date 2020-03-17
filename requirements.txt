@@ -1,0 +1,6 @@
+flask-restx
+flask_cors
+requests
+gunicorn
+werkzeug==0.16.1
+pandas
