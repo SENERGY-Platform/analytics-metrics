@@ -29,7 +29,8 @@ pipelines_model = api.model('PipelinesResponse', {
     'username': fields.String(description='username for auth'),
     'password': fields.String(descirption='Password for auth'),
     'url': fields.String(description="URL of the influx db instance"),
-    'interval': fields.String(description="Number of seconds between metric updates")
+    'interval': fields.String(description="Number of seconds between metric updates"),
+    'xmlurl': fields.String(description="URL to retrieve jmx config file (xml)")
 })
 
 @api.route('/<string:pipeline_id>')
@@ -50,7 +51,8 @@ class Pipelines(Resource):
             'username': os.environ['INFLUX_DB_USER'],
             'password': os.environ['INFLUX_DB_PASSWORD'],
             'url': os.environ['INFLUX_DB_URL'],
-            'interval': os.environ['METRICS_INTERVAL']
+            'interval': os.environ['METRICS_INTERVAL'],
+            'xmlurl': os.environ['METRICS_CONFIG_URL']
         }
         return response, 201
 
