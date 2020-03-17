@@ -98,10 +98,7 @@ def response_from_dfs(df, name):
         value = []
         for j in range(nump.shape[1]):
             ij = nump[i][j]
-            if type(ij) is not str and math.isnan(ij):
-                value.append(None)
-            else:
-                value.append(ij)
+            value.append(ij)
         values.append(value)
     columns = []
     for i in df[0].columns:
