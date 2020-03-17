@@ -28,18 +28,17 @@ Structure of POST Body:
   },
   "queries": [
     {
-      "id": "", // 'pipe:operator' -> db
+      "pipeline": "" //pipeline -> db
+      "operator": "", // 'pipe:operator' -> db
       "fields": {
-        "name": "", // metric -> table
+        "metric": "", // metric -> table
       }
     }
   ],
   "limit": 100 // optional, will return values for all queries when available
 }
-'''
 
-'''
-TODO: Math, Groups
+TODO: Math
 '''
 
 import json
@@ -49,11 +48,12 @@ import re
 from flask import request, jsonify
 from flask_restx import Namespace, abort, Resource
 
-from server.util import query_influx, dataframes, response_from_dfs, OperatorChecker
+from server.util import query_influx, dataframes, response_from_dfs, pipeline_belongs_to_user, get_pipeline_reponse
 
 import pandas as pd
 
-api = Namespace('queries', description="[WIP] Retrieve metrics")
+api = Namespace('queries', description="Retrieve metrics")
+
 
 @api.route('')
 @api.response(400, 'Bad request')
@@ -75,7 +75,6 @@ class Queries(Resource):
             abort(400, "Missing queries object")
 
         user_id = request.headers.get("X-UserID")
-        operator_checker = OperatorChecker(user_id)
 
         try:
             grouptime = body['group']['time'].replace(" ", "")
@@ -95,13 +94,17 @@ class Queries(Resource):
             columns.append([])
             columns[i].append("time")
             try:
-                id = queries[i]['id']
+                pipeline = queries[i]['pipeline']
             except KeyError:
-                abort(400, "Missing id for query " + str(i))
+                abort(400, "Missing pipeline for query " + str(i))
+            try:
+                operator = queries[i]["operator"]
+            except KeyError:
+                abort(400, "Missing operator for pipeline " + pipeline)
 
             # auth check
             try:
-                check = operator_checker.user_has_operator(id)
+                check = pipeline_belongs_to_user(get_pipeline_reponse(pipeline, user_id), user_id)
             except Exception as e:
                 print(str(e))
                 abort(502, str(e))
@@ -113,30 +116,32 @@ class Queries(Resource):
             try:
                 fields = queries[i]['fields']
             except KeyError:
-                abort(400, "Missing fields for id " + id)
+                abort(400, "Missing fields for pipeline " + pipeline)
             querystring = "SELECT "
             if use_groups:
-                querystring += grouptype + "(*) "
+                querystring += grouptype + "(value) "
             else:
-                querystring += "* "
+                querystring += "value "
             querystring += "FROM "
             for j in range(len(fields)):
                 try:
-                    name = queries[i]['fields'][j]["name"]
+                    metric = queries[i]['fields'][j]["metric"]
                 except KeyError:
-                    abort(400, "Missing name for id " + id)
-                columns[i].append(id + "." + name)
-                querystring += "\"" + name + "\""
+                    abort(400, "Missing metric for field " + str(j) +", pipeline/operator " + pipeline + "/" + operator)
+                columns[i].append(pipeline + ":" + operator + ":" + metric)
+                querystring += "\"" + metric + "\""
                 if j < len(fields) - 1:
                     querystring += ", "
                 else:
                     querystring += " "
 
+            querystring += "WHERE \"operator\" = \'" + operator + "\' "
+
             try:
                 last = body["time"]["last"].replace(" ", "")
                 if self.regex_duration.fullmatch(last) is None:
                     abort(400, "Invalid duration " + last)
-                querystring += "WHERE time > now() - " + last
+                querystring += "AND time > now() - " + last
                 try:
                     time_start = body["time"]["start"]
                     abort(400, "You supplied 'time.last' and time.start")
@@ -191,4 +196,3 @@ class Queries(Resource):
         hasher = hashlib.sha256()
         hasher.update(request.data)
         return response_from_dfs(df, "metricsquery." + str(hasher.hexdigest()))
-
