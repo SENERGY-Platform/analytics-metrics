@@ -160,7 +160,7 @@ class Queries(Resource):
                         abort(400, "Invalid 'time.start': " + time_start)
                     if self.regex_date.fullmatch(time_end) is None:
                         abort(400, "Invalid 'time.end': " + time_end)
-                    querystring += "WHERE time < '" + time_end + "' AND time > '" + time_start + "'"
+                    querystring += "AND time < '" + time_end + "' AND time > '" + time_start + "'"
                 except KeyError:
                     abort(400, "Missing time parameter")
 
