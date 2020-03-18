@@ -179,7 +179,7 @@ class Queries(Resource):
                 querystring += " GROUP BY time(" + grouptime + ")"
             try:
                 limit = int(body["limit"])
-                querystring += " LIMIT " + str(limit)
+                querystring += " ORDER BY \"time\" DESC LIMIT " + str(limit)
             except KeyError:
                 pass
             except Exception:
