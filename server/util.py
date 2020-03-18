@@ -21,20 +21,20 @@ from requests.auth import HTTPBasicAuth
 import pandas as pd
 
 
-def query_influx(query, operator_id, params=None):
+def query_influx(query, pipeline_id, params=None):
     query = escape(query)
     url = "{influx_db_url}/query".format(influx_db_url=os.environ["INFLUX_DB_URL"])
     if params:
         params = escape(params)
-        response = requests.post(url, params=f'db={operator_id}&q={query}&params={str(params)}',
+        response = requests.post(url, params=f'db={pipeline_id}&q={query}&params={str(params)}',
                                  auth=HTTPBasicAuth(os.environ['INFLUX_DB_USER'], os.environ['INFLUX_DB_PASSWORD']))
-        print("Request: " + url + "?db=" + operator_id + "&q=" + query + "&params=" + str(params))
+        print("Request: " + url + "?db=" + pipeline_id + "&q=" + query + "&params=" + str(params))
         return response
     else:
         query = {"q": query}
-        response = requests.post(url, params="db=" + operator_id, data=query,
+        response = requests.post(url, params="db=" + pipeline_id, data=query,
                                  auth=HTTPBasicAuth(os.environ['INFLUX_DB_USER'], os.environ['INFLUX_DB_PASSWORD']))
-        print("Request: " + url + "?db=" + operator_id + "&q=" + query["q"])
+        print("Request: " + url + "?db=" + pipeline_id + "&q=" + query["q"])
         return response
 
 
@@ -81,88 +81,17 @@ def get_operators_of_pipeline(pipeline_reponse):
     return operators
 
 
-def response_from_dfs(df, name):
-    resp = empty_response()
-
-    if len(df) < 1:
-        return resp
-
-    for i in range(1, len(df)):
-        df[0] = df[0].merge(df[i], how="outer", on="time")
-
-    df[0].sort_values(axis=0, by='time', inplace=True, ascending=False)
-
-    nump = df[0].to_numpy()
-    values = []
-    for i in range(nump.shape[0]):
-        value = []
-        for j in range(nump.shape[1]):
-            ij = nump[i][j]
-            if type(ij) is not str and math.isnan(ij):
-                value.append(None)
-            else:
-                value.append(ij)
-        values.append(value)
-    columns = []
-    for i in df[0].columns:
-        columns.append(i)
-
-    resp['results'][0]['series'][0]['columns'] = columns
-    resp['results'][0]['series'][0]['name'] = 'merge.' + name
-    resp['results'][0]['series'][0]['values'] = values
-
-    return resp
-
-
-def empty_response():
-    return {
-        'results': [
-            {
-                'series': [
-                    {
-                        'columns': [],
-                        'name': '',
-                        'values': []
-                    }
-                ],
-                'statement_id': 0
-            }
-        ]
-    }
-
 def called_from_cluster(request):
     if request.headers.get("X-UserID", "none") == "none":
         return True
     return False
 
-def dataframes(id, response):
-    if 'error' in response.json:
-        raise Exception(response.json)
-    df = []
-    try:
-        seriess = json.loads(response.data.decode("utf-8"))['results'][0]['series']
-    except KeyError as ke:
-        print("Got empty results for query with id " + id)
-        return df
-    for series in seriess:
-        columns = series["columns"]
-        values = series['values']
+def get_metrics_for_pipeline(id):
+    influx_measurements = query_influx(query="SHOW MEASUREMENTS", pipeline_id=id).json()
+    metrics = []
+    values = str(influx_measurements["results"][0]["series"][0]["values"])
+    values = values.replace('[', '').replace(']', '').replace("'", "").replace(" ", "").split(",")
+    for operator_measurement in values:
+        metrics.append(operator_measurement)
 
-        for i in range(len(columns)):
-            if columns[i] != "time":
-                columns[i] = str(id) + ":" + series["name"]
-        df.append(pd.DataFrame.from_records(values, columns=columns))
-    return df
-
-
-class OperatorChecker:
-    def __init__(self, userId):
-        self.operators = []
-        for pipeline in get_pipelines_reponse(userId).json():
-            pipeline_response = get_pipeline_reponse(pipeline["id"], userId)
-            operators = get_operators_of_pipeline(pipeline_response)
-            for operator in operators:
-                self.operators.append(operator["id"])
-
-    def user_has_operator(self, operatorId):
-        return operatorId in self.operators
+    return metrics
