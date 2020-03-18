@@ -85,3 +85,13 @@ def called_from_cluster(request):
     if request.headers.get("X-UserID", "none") == "none":
         return True
     return False
+
+def get_metrics_for_pipeline(id):
+    influx_measurements = query_influx(query="SHOW MEASUREMENTS", pipeline_id=id).json()
+    metrics = []
+    values = str(influx_measurements["results"][0]["series"][0]["values"])
+    values = values.replace('[', '').replace(']', '').replace("'", "").replace(" ", "").split(",")
+    for operator_measurement in values:
+        metrics.append(operator_measurement)
+
+    return metrics

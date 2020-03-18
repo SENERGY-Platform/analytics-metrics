@@ -26,6 +26,8 @@ from flask_restx import Api
 from server.apis.queries import api as queries
 from server.apis.measurements import api as measurements
 from server.apis.pipelines import api as pipelines
+from server.apis.lastconsumed import api as pipelines
+
 
 
 application = Flask("analytics-metrics")

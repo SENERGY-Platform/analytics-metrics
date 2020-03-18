@@ -18,7 +18,7 @@ import json
 from flask import request
 from flask_restx import Namespace, abort, fields, Resource
 
-from server.util import query_influx, get_pipeline_reponse, pipeline_belongs_to_user
+from server.util import get_pipeline_reponse, pipeline_belongs_to_user, get_metrics_for_pipeline
 
 api = Namespace('measurements', description='Gives information about what operators have logged which metrics for a '
                                             'given pipeline id.')
@@ -76,13 +76,3 @@ class MeasurementsMulti(Resource):
             response['list'].append(metrics)
 
         return response
-
-def get_metrics_for_pipeline(id):
-    influx_measurements = query_influx(query="SHOW MEASUREMENTS", pipeline_id=id).json()
-    metrics = []
-    values = str(influx_measurements["results"][0]["series"][0]["values"])
-    values = values.replace('[', '').replace(']', '').replace("'", "").replace(" ", "").split(",")
-    for operator_measurement in values:
-        metrics.append(operator_measurement)
-
-    return metrics
