@@ -26,7 +26,7 @@ from flask_restx import Api
 from server.apis.queries import api as queries
 from server.apis.measurements import api as measurements
 from server.apis.pipelines import api as pipelines
-from server.apis.lastconsumed import api as pipelines
+from server.apis.lastconsumed import api as lastconsumed
 
 
 
@@ -41,6 +41,7 @@ api = Api(
 api.add_namespace(queries)
 api.add_namespace(measurements)
 api.add_namespace(pipelines)
+api.add_namespace(lastconsumed)
 
 @api.route('/doc')
 class Docs(Resource):
